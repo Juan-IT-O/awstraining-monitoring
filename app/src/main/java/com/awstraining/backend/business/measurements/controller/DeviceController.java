@@ -9,6 +9,8 @@ import com.awstraining.backend.api.rest.v1.model.Measurement;
 import com.awstraining.backend.api.rest.v1.model.Measurements;
 import com.awstraining.backend.business.measurements.MeasurementDO;
 import com.awstraining.backend.business.measurements.MeasurementService;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,13 +25,17 @@ class DeviceController implements DeviceIdApi {
 
     private final MeasurementService service;
 
+    private final MeterRegistry meterRegistry;
+
     @Autowired
-    public DeviceController(final MeasurementService service) {
+    public DeviceController(final MeasurementService service, final MeterRegistry meterRegistry) {
         this.service = service;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
     public ResponseEntity<Measurement> publishMeasurements(final String deviceId, final Measurement measurement) {
+        meterRegistry.counter("publishcounter","method", "invocation").increment();
         LOGGER.info("Publishing measurement for device '{}'", deviceId);
         final MeasurementDO measurementDO = fromMeasurement(deviceId, measurement);
         service.saveMeasurement(measurementDO);
@@ -45,7 +51,16 @@ class DeviceController implements DeviceIdApi {
         final Measurements measurementsResult = new Measurements();
         measurementsResult.measurements(measurements);
         LOGGER.info("Found {} measurments", measurements.size());
+        Counter counter = dummyMethodCounter();
+        counter.increment();
         return ResponseEntity.ok(measurementsResult);
+    }
+    private Counter dummyMethodCounter(){
+        String methodName = new Object(){}.getClass().getEnclosingMethod().getName();
+        return Counter.builder("dummyMethodCounter")
+                .tag(methodName, "retrieve mesurments")
+                .description("Counter for dummy method")
+                .register(meterRegistry);
     }
 
     private Measurement toMeasurement(final MeasurementDO measurementDO) {
